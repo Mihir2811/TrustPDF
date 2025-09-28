@@ -1,0 +1,770 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TrustPDF - Enhanced Security Scanner</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/feather-icons"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        .risk-low { background-color: #d1fae5; color: #065f46; }
+        .risk-medium { background-color: #fef3c7; color: #92400e; }
+        .risk-high { background-color: #fee2e2; color: #991b1b; }
+        .risk-critical { background-color: #fecaca; color: #7f1d1d; border: 2px solid #dc2626; }
+        .console-output {
+            font-family: 'Courier New', monospace;
+            background-color: #1e293b;
+            color: #f8fafc;
+            height: 400px;
+            overflow-y: auto;
+        }
+        .tab-active {
+            border-bottom: 2px solid #3b82f6;
+            color: #3b82f6;
+        }
+        .loading-spinner {
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #3498db;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .progress-bar {
+            width: 0%;
+            height: 100%;
+            background: linear-gradient(90deg, #3b82f6, #1d4ed8);
+            border-radius: 4px;
+            transition: width 0.3s ease;
+        }
+        .verdict-box {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-radius: 12px;
+            padding: 24px;
+            margin: 16px 0;
+            box-shadow: 0 8px 25px rgba(0,0,0,0.15);
+        }
+        .verdict-critical {
+            background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%);
+        }
+        .verdict-high {
+            background: linear-gradient(135deg, #ea580c 0%, #dc2626 100%);
+        }
+        .verdict-medium {
+            background: linear-gradient(135deg, #f59e0b 0%, #ea580c 100%);
+        }
+        .verdict-low {
+            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+        }
+        .check-item {
+            display: flex;
+            align-items: center;
+            padding: 8px 0;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+        }
+        .check-item:last-child {
+            border-bottom: none;
+        }
+        .metadata-grid {
+            display: grid;
+            grid-template-columns: 1fr 2fr;
+            gap: 12px;
+            align-items: center;
+        }
+        .metadata-item {
+            padding: 8px 0;
+            border-bottom: 1px solid #e5e7eb;
+        }
+        .metadata-item:last-child {
+            border-bottom: none;
+        }
+        .finding-critical {
+            background-color: #fecaca;
+            border-left: 4px solid #dc2626;
+            color: #7f1d1d;
+        }
+        .finding-error {
+            background-color: #fee2e2;
+            border-left: 4px solid #f87171;
+            color: #991b1b;
+        }
+        .finding-warning {
+            background-color: #fef3c7;
+            border-left: 4px solid #fbbf24;
+            color: #92400e;
+        }
+    </style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+    <div class="container mx-auto px-4 py-8">
+        <header class="mb-8">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center space-x-3">
+                    <i data-feather="shield" class="text-blue-600 w-8 h-8"></i>
+                    <h1 class="text-3xl font-bold text-gray-800">TrustPDF</h1>
+                </div>
+            </div>
+            <p class="mt-3 text-gray-600">Comprehensive security assessment and tampering detection for PDF documents</p>
+        </header>
+
+        <!-- Upload Section -->
+        <div class="bg-white rounded-lg shadow-md p-6 mb-8">
+            <div class="flex flex-col md:flex-row gap-6">
+                <div class="md:w-1/2">
+                    <div class="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-blue-500 transition cursor-pointer" id="dropzone">
+                        <div class="flex flex-col items-center justify-center py-8">
+                            <i data-feather="upload" class="w-12 h-12 text-gray-400 mb-4"></i>
+                            <h3 class="text-lg font-medium text-gray-700">Drag & drop PDF file here</h3>
+                            <p class="text-sm text-gray-500 mt-1">or click to browse files</p>
+                        </div>
+                        <input type="file" id="fileInput" class="hidden" accept=".pdf">
+                    </div>
+                    
+                    <!-- Progress Bar -->
+                    <div id="progressContainer" class="mt-4 hidden">
+                        <div class="flex items-center justify-between mb-2">
+                            <span class="text-sm text-gray-600">Analyzing PDF...</span>
+                            <span id="progressText" class="text-sm text-blue-600">0%</span>
+                        </div>
+                        <div class="w-full bg-gray-200 rounded-full h-2">
+                            <div id="progressBar" class="progress-bar"></div>
+                        </div>
+                    </div>
+
+                    <div class="mt-4">
+                        <div class="flex items-center space-x-2">
+                            <i data-feather="info" class="w-4 h-4 text-blue-500"></i>
+                            <p class="text-sm text-gray-600">Maximum file size: 50MB</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="md:w-1/2">
+                    <div class="bg-gray-50 p-4 rounded-lg">
+                        <h3 class="font-medium text-gray-700 mb-3">Security Checks:</h3>
+                        <ul class="space-y-2">
+                            <li class="flex items-start space-x-2">
+                                <i data-feather="check-circle" class="w-4 h-4 text-green-500 mt-0.5"></i>
+                                <span>Comprehensive Metadata Validation</span>
+                            </li>
+                            <li class="flex items-start space-x-2">
+                                <i data-feather="check-circle" class="w-4 h-4 text-green-500 mt-0.5"></i>
+                                <span>Creation and Modification Date Verification</span>
+                            </li>
+                            <li class="flex items-start space-x-2">
+                                <i data-feather="check-circle" class="w-4 h-4 text-green-500 mt-0.5"></i>
+                                <span>Trusted Software Whitelist Enforcement</span>
+                            </li>
+                            <li class="flex items-start space-x-2">
+                                <i data-feather="check-circle" class="w-4 h-4 text-green-500 mt-0.5"></i>
+                                <span>Incremental Update Detection</span>
+                            </li>
+                            <li class="flex items-start space-x-2">
+                                <i data-feather="check-circle" class="w-4 h-4 text-green-500 mt-0.5"></i>
+                                <span>Embedded Content and JavaScript Analysis</span>
+                            </li>
+                            <li class="flex items-start space-x-2">
+                                <i data-feather="check-circle" class="w-4 h-4 text-green-500 mt-0.5"></i>
+                                <span>File Structure Integrity Verification</span>
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Results Section -->
+        <div id="resultsSection" class="hidden">
+            <div class="flex border-b border-gray-200 mb-6 overflow-x-auto">
+                <button class="tab-button px-4 py-2 font-medium text-gray-600 hover:text-blue-600 transition tab-active whitespace-nowrap" data-tab="verdict">Final Verdict</button>
+                <button class="tab-button px-4 py-2 font-medium text-gray-600 hover:text-blue-600 transition whitespace-nowrap" data-tab="summary">Summary</button>
+                <button class="tab-button px-4 py-2 font-medium text-gray-600 hover:text-blue-600 transition whitespace-nowrap" data-tab="metadata">Document Info</button>
+                <button class="tab-button px-4 py-2 font-medium text-gray-600 hover:text-blue-600 transition whitespace-nowrap" data-tab="security">Security Details</button>
+                <button class="tab-button px-4 py-2 font-medium text-gray-600 hover:text-blue-600 transition whitespace-nowrap" data-tab="console">Full Log</button>
+            </div>
+
+            <div id="tabContent">
+                <!-- Final Verdict Tab -->
+                <div class="tab-content active" id="verdict-tab">
+                    <div class="verdict-box" id="verdictBox">
+                        <div class="text-center">
+                            <h2 class="text-2xl font-bold mb-4">Final Security Verdict</h2>
+                            <div class="text-6xl mb-4" id="verdictIcon">🔍</div>
+                            <h3 class="text-xl font-semibold mb-2" id="verdictLevel">Analysis Pending...</h3>
+                            <p class="text-lg opacity-90 mb-6" id="verdictDescription">Upload a PDF file to see the security verdict.</p>
+                        </div>
+                        
+                        <div class="bg-black bg-opacity-20 rounded-lg p-4 mb-4">
+                            <h4 class="font-semibold mb-3">Security Checklist:</h4>
+                            <div id="securityChecklist" class="space-y-2">
+                                <div class="check-item">
+                                    <span class="mr-3">🔄</span>
+                                    <span>Waiting for analysis...</span>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="bg-black bg-opacity-20 rounded-lg p-4">
+                            <h4 class="font-semibold mb-2">What This Means:</h4>
+                            <p id="verdictExplanation" class="opacity-90">
+                                The security verdict will provide a clear explanation of the document's trustworthiness.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Summary Tab -->
+                <div class="tab-content hidden" id="summary-tab">
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+                        <div class="bg-white rounded-lg shadow-sm p-6">
+                            <h3 class="font-medium text-gray-700 mb-4">File Information</h3>
+                            <div class="space-y-3">
+                                <div class="flex justify-between">
+                                    <span class="text-gray-600">File Name:</span>
+                                    <span class="font-medium" id="fileName">-</span>
+                                </div>
+                                <div class="flex justify-between">
+                                    <span class="text-gray-600">File Size:</span>
+                                    <span class="font-medium" id="fileSize">-</span>
+                                </div>
+                                <div class="flex justify-between">
+                                    <span class="text-gray-600">SHA-256:</span>
+                                    <span class="font-mono text-xs" id="fileHash" title="">-</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="bg-white rounded-lg shadow-sm p-6">
+                            <h3 class="font-medium text-gray-700 mb-4">Security Risk</h3>
+                            <div class="flex flex-col items-center justify-center">
+                                <div class="risk-low rounded-full px-4 py-1 mb-3 font-medium" id="riskLevel">Low Risk</div>
+                                <div class="text-center">
+                                    <p class="text-sm text-gray-600" id="riskDescription">Analysis pending...</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="bg-white rounded-lg shadow-sm p-6">
+                            <h3 class="font-medium text-gray-700 mb-4">Quick Stats</h3>
+                            <div class="space-y-3">
+                                <div class="flex justify-between">
+                                    <span class="text-gray-600">Incremental Updates:</span>
+                                    <span class="font-medium" id="incrementalUpdates">-</span>
+                                </div>
+                                <div class="flex justify-between">
+                                    <span class="text-gray-600">Embedded Files:</span>
+                                    <span class="font-medium" id="embeddedFiles">-</span>
+                                </div>
+                                <div class="flex justify-between">
+                                    <span class="text-gray-600">JavaScript Blocks:</span>
+                                    <span class="font-medium" id="javascriptBlocks">-</span>
+                                </div>
+                                <div class="flex justify-between">
+                                    <span class="text-gray-600">Red Flags:</span>
+                                    <span class="font-medium" id="redFlags">-</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="bg-white rounded-lg shadow-sm p-6 mb-6">
+                        <h3 class="font-medium text-gray-700 mb-4">Key Findings</h3>
+                        <div id="findingsContainer" class="space-y-4">
+                            <!-- Findings will be populated here -->
+                        </div>
+                    </div>
+
+                    <div class="bg-white rounded-lg shadow-sm p-6">
+                        <h3 class="font-medium text-gray-700 mb-4">Recommendations</h3>
+                        <div id="recommendationsContainer" class="space-y-3">
+                            <!-- Recommendations will be populated here -->
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Metadata Tab -->
+                <div class="tab-content hidden" id="metadata-tab">
+                    <div class="bg-white rounded-lg shadow-sm p-6 mb-6">
+                        <h3 class="font-medium text-gray-700 mb-4">Complete Document Information</h3>
+                        <div class="overflow-x-auto">
+                            <table class="min-w-full divide-y divide-gray-200">
+                                <thead class="bg-gray-50">
+                                    <tr>
+                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Property</th>
+                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Value</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="metadataTableBody" class="bg-white divide-y divide-gray-200">
+                                    <!-- Metadata rows will be populated here -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Security Details Tab -->
+                <div class="tab-content hidden" id="security-tab">
+                    <div class="bg-white rounded-lg shadow-sm p-6 mb-6">
+                        <h3 class="font-medium text-gray-700 mb-4">Security Analysis</h3>
+                        <div id="securityDetailsContainer" class="space-y-6">
+                            <!-- Security details will be populated here -->
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Console Output Tab -->
+                <div class="tab-content hidden" id="console-tab">
+                    <div class="bg-white rounded-lg shadow-sm p-6 mb-6">
+                        <h3 class="font-medium text-gray-700 mb-4">Complete Analysis Log</h3>
+                        <div class="console-output p-4 rounded-md" id="consoleOutput">
+                            <!-- Console output will be populated here -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Loading Modal -->
+        <div id="loadingModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center hidden z-50">
+            <div class="bg-white rounded-lg p-6 text-center">
+                <div class="loading-spinner mx-auto mb-4"></div>
+                <h3 class="text-lg font-medium text-gray-700 mb-2">Analyzing PDF...</h3>
+                <p class="text-gray-500">Running comprehensive security checks</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        feather.replace();
+        
+        let analysisData = null;
+        
+        // Tab switching functionality
+        document.querySelectorAll('.tab-button').forEach(button => {
+            button.addEventListener('click', () => {
+                document.querySelectorAll('.tab-button').forEach(btn => {
+                    btn.classList.remove('tab-active');
+                });
+                document.querySelectorAll('.tab-content').forEach(tab => {
+                    tab.classList.remove('active');
+                    tab.classList.add('hidden');
+                });
+                
+                button.classList.add('tab-active');
+                const tabId = button.getAttribute('data-tab') + '-tab';
+                document.getElementById(tabId).classList.add('active');
+                document.getElementById(tabId).classList.remove('hidden');
+            });
+        });
+        
+        // File dropzone functionality
+        const dropzone = document.getElementById('dropzone');
+        const fileInput = document.getElementById('fileInput');
+        
+        dropzone.addEventListener('click', () => {
+            fileInput.click();
+        });
+        
+        fileInput.addEventListener('change', (e) => {
+            if (e.target.files.length) {
+                handleFileUpload(e.target.files[0]);
+            }
+        });
+        
+        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+            dropzone.addEventListener(eventName, preventDefaults, false);
+        });
+        
+        function preventDefaults(e) {
+            e.preventDefault();
+            e.stopPropagation();
+        }
+        
+        ['dragenter', 'dragover'].forEach(eventName => {
+            dropzone.addEventListener(eventName, highlight, false);
+        });
+        
+        ['dragleave', 'drop'].forEach(eventName => {
+            dropzone.addEventListener(eventName, unhighlight, false);
+        });
+        
+        function highlight() {
+            dropzone.classList.add('border-blue-500');
+        }
+        
+        function unhighlight() {
+            dropzone.classList.remove('border-blue-500');
+        }
+        
+        dropzone.addEventListener('drop', handleDrop, false);
+        
+        function handleDrop(e) {
+            const dt = e.dataTransfer;
+            const file = dt.files[0];
+            handleFileUpload(file);
+        }
+        
+        async function handleFileUpload(file) {
+            if (file.type !== 'application/pdf') {
+                alert('Please upload a PDF file');
+                return;
+            }
+            
+            if (file.size > 50 * 1024 * 1024) {
+                alert('File size exceeds 50MB limit');
+                return;
+            }
+            
+            // Show loading modal
+            document.getElementById('loadingModal').classList.remove('hidden');
+            
+            // Prepare form data
+            const formData = new FormData();
+            formData.append('file', file);
+            
+            try {
+                // Send file to backend
+                const response = await fetch('/analyze', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.detail || 'Analysis failed');
+                }
+                
+                const results = await response.json();
+                analysisData = results;
+                
+                // Update UI with results
+                updateUI(results);
+                
+                // Show results section
+                document.getElementById('resultsSection').classList.remove('hidden');
+                
+                // Hide loading modal
+                document.getElementById('loadingModal').classList.add('hidden');
+                
+                // Switch to Final Verdict tab and scroll to results
+                switchToTab('verdict');
+                document.getElementById('resultsSection').scrollIntoView({ behavior: 'smooth' });
+                
+            } catch (error) {
+                console.error('Analysis failed:', error);
+                alert(`Analysis failed: ${error.message}`);
+                document.getElementById('loadingModal').classList.add('hidden');
+            }
+        }
+        
+        function switchToTab(tabName) {
+            document.querySelectorAll('.tab-button').forEach(btn => {
+                btn.classList.remove('tab-active');
+            });
+            document.querySelectorAll('.tab-content').forEach(tab => {
+                tab.classList.remove('active');
+                tab.classList.add('hidden');
+            });
+            
+            const button = document.querySelector(`[data-tab="${tabName}"]`);
+            const tab = document.getElementById(tabName + '-tab');
+            
+            if (button && tab) {
+                button.classList.add('tab-active');
+                tab.classList.add('active');
+                tab.classList.remove('hidden');
+            }
+        }
+        
+        function updateUI(data) {
+            // Update file information
+            document.getElementById('fileName').textContent = data.file_info.name;
+            document.getElementById('fileSize').textContent = data.file_info.size_formatted;
+            document.getElementById('fileHash').textContent = data.file_info.hash.substring(0, 16) + '...';
+            document.getElementById('fileHash').title = data.file_info.hash;
+            
+            // Update risk assessment
+            const riskLevel = document.getElementById('riskLevel');
+            riskLevel.textContent = data.risk_assessment.level;
+            riskLevel.className = `rounded-full px-4 py-1 mb-3 font-medium ${data.risk_assessment.class}`;
+            document.getElementById('riskDescription').textContent = data.risk_assessment.description;
+            
+            // Update quick stats
+            document.getElementById('incrementalUpdates').textContent = data.quick_stats.incremental_updates;
+            document.getElementById('embeddedFiles').textContent = data.quick_stats.embedded_files;
+            document.getElementById('javascriptBlocks').textContent = data.quick_stats.javascript_blocks;
+            document.getElementById('redFlags').textContent = data.quick_stats.red_flags;
+            
+            // Update Final Verdict
+            updateFinalVerdict(data.final_verdict);
+            
+            // Update findings
+            updateFindings(data.findings);
+            
+            // Update recommendations
+            updateRecommendations(data.recommendations);
+            
+            // Update metadata table
+            updateMetadataTable(data.metadata.table);
+            
+            // Update security details
+            updateSecurityDetails(data.security_details);
+            
+            // Update console output
+            updateConsoleOutput(data.console_output);
+        }
+        
+        function updateFinalVerdict(verdict) {
+            const verdictBox = document.getElementById('verdictBox');
+            const verdictIcon = document.getElementById('verdictIcon');
+            const verdictLevel = document.getElementById('verdictLevel');
+            const verdictDescription = document.getElementById('verdictDescription');
+            const securityChecklist = document.getElementById('securityChecklist');
+            const verdictExplanation = document.getElementById('verdictExplanation');
+            
+            // Update verdict box styling
+            verdictBox.className = `verdict-box ${verdict.css_class}`;
+            
+            // Update icon and text
+            verdictIcon.textContent = verdict.icon;
+            verdictLevel.textContent = verdict.overall;
+            verdictDescription.textContent = verdict.explanation;
+            verdictExplanation.textContent = verdict.summary;
+            
+            // Update security checklist
+            securityChecklist.innerHTML = '';
+            verdict.detailed_checks.forEach(check => {
+                const checkItem = document.createElement('div');
+                checkItem.className = 'check-item';
+                checkItem.innerHTML = `
+                    <span class="mr-3">${check.icon}</span>
+                    <span>${check.text}</span>
+                `;
+                securityChecklist.appendChild(checkItem);
+            });
+        }
+        
+        function updateFindings(findings) {
+            const container = document.getElementById('findingsContainer');
+            container.innerHTML = '';
+            
+            if (findings.length === 0) {
+                container.innerHTML = '<p class="text-gray-500 italic">No significant security issues detected.</p>';
+                return;
+            }
+            
+            findings.forEach(finding => {
+                let findingClass = 'finding-warning';
+                if (finding.type === 'critical') findingClass = 'finding-critical';
+                else if (finding.type === 'error') findingClass = 'finding-error';
+                
+                const div = document.createElement('div');
+                div.className = `p-3 rounded-md ${findingClass}`;
+                div.innerHTML = `
+                    <div class="flex items-start space-x-3">
+                        <i data-feather="${finding.icon}" class="w-5 h-5 mt-0.5"></i>
+                        <div>
+                            <h4 class="font-medium">${finding.title}</h4>
+                            <p class="text-sm mt-1">${finding.description}</p>
+                        </div>
+                    </div>
+                `;
+                container.appendChild(div);
+            });
+            
+            // Re-initialize feather icons
+            feather.replace();
+        }
+        
+        function updateRecommendations(recommendations) {
+            const container = document.getElementById('recommendationsContainer');
+            container.innerHTML = '';
+            
+            if (recommendations.length === 0) {
+                container.innerHTML = '<p class="text-gray-500 italic">No specific recommendations at this time.</p>';
+                return;
+            }
+            
+            recommendations.forEach(rec => {
+                const div = document.createElement('div');
+                div.className = 'flex items-start space-x-3';
+                div.innerHTML = `
+                    <i data-feather="check-circle" class="w-5 h-5 text-green-500 mt-0.5"></i>
+                    <div>
+                        <p>${rec}</p>
+                    </div>
+                `;
+                container.appendChild(div);
+            });
+            
+            feather.replace();
+        }
+        
+        function updateMetadataTable(metadata) {
+            const tbody = document.getElementById('metadataTableBody');
+            tbody.innerHTML = '';
+            
+            if (metadata.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="2" class="px-6 py-4 text-center text-gray-500 italic">No metadata available</td></tr>';
+                return;
+            }
+            
+            metadata.forEach(item => {
+                const row = document.createElement('tr');
+                const valueText = item.value === 'Not specified' ? 
+                    '<span class="text-gray-400 italic">Not specified</span>' : 
+                    item.value;
+                
+                row.innerHTML = `
+                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${item.key}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${valueText}</td>
+                `;
+                tbody.appendChild(row);
+            });
+        }
+        
+        function updateSecurityDetails(details) {
+            const container = document.getElementById('securityDetailsContainer');
+            container.innerHTML = '';
+            
+            // Core security features
+            const coreDiv = document.createElement('div');
+            coreDiv.innerHTML = `
+                <h4 class="text-lg font-medium text-gray-800 mb-3">Core Security Features</h4>
+                <div class="pl-4 border-l-2 border-gray-200 space-y-3">
+                    <div class="flex items-center justify-between py-2">
+                        <span class="text-gray-600">Digital Signatures:</span>
+                        <span class="font-medium">${details.signatures}</span>
+                    </div>
+                    <div class="flex items-center justify-between py-2">
+                        <span class="text-gray-600">Encryption Status:</span>
+                        <span class="font-medium">${details.encryption}</span>
+                    </div>
+                    <div class="flex items-center justify-between py-2">
+                        <span class="text-gray-600">Cross-reference Objects:</span>
+                        <span class="font-medium">${details.xref_total}</span>
+                    </div>
+                    <div class="flex items-center justify-between py-2">
+                        <span class="text-gray-600">Images Found:</span>
+                        <span class="font-medium">${details.image_count}</span>
+                    </div>
+                    <div class="flex items-center justify-between py-2">
+                        <span class="text-gray-600">File Optimization:</span>
+                        <span class="font-medium">${details.optimization_reduction.toFixed(1)}%</span>
+                    </div>
+                </div>
+            `;
+            container.appendChild(coreDiv);
+            
+            // Embedded files section
+            if (details.embedded_files.length > 0) {
+                const embeddedDiv = document.createElement('div');
+                embeddedDiv.innerHTML = `
+                    <h4 class="text-lg font-medium text-gray-800 mb-3">Embedded Files</h4>
+                    <div class="pl-4 border-l-2 border-gray-200">
+                        ${details.embedded_files.map(file => `
+                            <div class="p-3 rounded-md finding-error mb-3">
+                                <div class="flex items-start space-x-3">
+                                    <i data-feather="file" class="w-5 h-5 mt-0.5"></i>
+                                    <div>
+                                        <h5 class="font-medium">Embedded File</h5>
+                                        <p class="text-sm mt-1">${file.name} (${file.size_formatted})</p>
+                                    </div>
+                                </div>
+                            </div>
+                        `).join('')}
+                    </div>
+                `;
+                container.appendChild(embeddedDiv);
+            }
+            
+            // JavaScript section
+            if (details.javascript_payloads.length > 0) {
+                const jsDiv = document.createElement('div');
+                jsDiv.innerHTML = `
+                    <h4 class="text-lg font-medium text-gray-800 mb-3">JavaScript Analysis</h4>
+                    <div class="pl-4 border-l-2 border-gray-200">
+                        ${details.javascript_payloads.map(payload => `
+                            <div class="p-3 rounded-md finding-critical mb-3">
+                                <div class="flex items-start space-x-3">
+                                    <i data-feather="alert-triangle" class="w-5 h-5 mt-0.5"></i>
+                                    <div>
+                                        <h5 class="font-medium">JavaScript Payload ${payload.id}</h5>
+                                        <p class="text-sm mt-1">${payload.size} characters</p>
+                                        <div class="mt-2 bg-gray-800 text-gray-200 p-2 rounded text-xs font-mono overflow-x-auto">
+                                            <pre>${payload.preview}</pre>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        `).join('')}
+                    </div>
+                `;
+                container.appendChild(jsDiv);
+            }
+            
+            feather.replace();
+        }
+        
+        function updateConsoleOutput(consoleLines) {
+            const container = document.getElementById('consoleOutput');
+            container.innerHTML = '';
+            
+            consoleLines.forEach(line => {
+                const div = document.createElement('div');
+                div.className = line.color_class;
+                div.textContent = line.message;
+                container.appendChild(div);
+            });
+        }
+        
+        // Utility function to format numbers
+        function formatNumber(num) {
+            if (typeof num !== 'number') return num;
+            return num.toLocaleString();
+        }
+        
+        // Initialize tooltips for file hash
+        document.addEventListener('DOMContentLoaded', function() {
+            const hashElement = document.getElementById('fileHash');
+            if (hashElement) {
+                hashElement.addEventListener('click', function() {
+                    if (this.title) {
+                        navigator.clipboard.writeText(this.title).then(() => {
+                            const originalText = this.textContent;
+                            this.textContent = 'Copied!';
+                            setTimeout(() => {
+                                this.textContent = originalText;
+                            }, 1500);
+                        });
+                    }
+                });
+            }
+        });
+    </script>
+    
+    <!-- Footer -->
+    <footer class="mt-16 py-8 bg-white border-t border-gray-200">
+        <div class="container mx-auto px-4 text-center">
+            <div class="flex items-center justify-center space-x-2 mb-4">
+                <i data-feather="shield" class="w-5 h-5 text-blue-600"></i>
+                <span class="font-semibold text-gray-800">TrustPDF Enhanced Security Scanner</span>
+            </div>
+            <p class="text-sm text-gray-600 mb-2">
+                Advanced PDF tampering detection with comprehensive metadata validation
+            </p>
+            <div class="flex flex-wrap justify-center gap-4 text-xs text-gray-500">
+                <span>✓ Mandatory metadata verification</span>
+                <span>✓ Date consistency checks</span>
+                <span>✓ Software whitelist validation</span>
+                <span>✓ 90% similarity threshold</span>
+                <span>✓ User-friendly security verdicts</span>
+            </div>
+        </div>
+    </footer>
+</body>
+</html>

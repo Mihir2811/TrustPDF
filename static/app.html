@@ -1,0 +1,466 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PDF Security Inspector</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/feather-icons"></script>
+    <script src="https://cdn.jsdelivr.net/npm/feather-icons/dist/feather.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        .risk-low { background-color: #d1fae5; color: #065f46; }
+        .risk-medium { background-color: #fef3c7; color: #92400e; }
+        .risk-high { background-color: #fee2e2; color: #991b1b; }
+        .console-output {
+            font-family: 'Courier New', monospace;
+            background-color: #1e293b;
+            color: #f8fafc;
+            height: 300px;
+            overflow-y: auto;
+        }
+        .pdf-preview {
+            height: 300px;
+            overflow-y: auto;
+            border: 1px solid #e2e8f0;
+        }
+        .tab-active {
+            border-bottom: 2px solid #3b82f6;
+            color: #3b82f6;
+        }
+    </style>
+</head>
+<body class="font-inter bg-gray-50 min-h-screen">
+    <div class="container mx-auto px-4 py-8">
+        <header class="mb-8">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center space-x-3">
+                    <i data-feather="shield" class="text-blue-600 w-8 h-8"></i>
+                    <h1 class="text-2xl font-bold text-gray-800">PDF Security Inspector</h1>
+                </div>
+            </div>
+            <p class="mt-2 text-gray-600">Comprehensive security assessment and tampering detection for PDF documents</p>
+        </header>
+
+        <div class="bg-white rounded-lg shadow-md p-6 mb-8">
+            <div class="flex flex-col md:flex-row gap-6">
+                <div class="md:w-1/2">
+                    <div class="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-blue-500 transition cursor-pointer" id="dropzone">
+                        <div class="flex flex-col items-center justify-center py-8">
+                            <i data-feather="upload" class="w-12 h-12 text-gray-400 mb-4"></i>
+                            <h3 class="text-lg font-medium text-gray-700">Drag & drop PDF file here</h3>
+                            <p class="text-sm text-gray-500 mt-1">or click to browse files</p>
+                        </div>
+                        <input type="file" id="fileInput" class="hidden" accept=".pdf">
+                    </div>
+                    <div class="mt-4">
+                        <div class="flex items-center space-x-2">
+                            <i data-feather="info" class="w-4 h-4 text-blue-500"></i>
+                            <p class="text-sm text-gray-600">Maximum file size: 50MB</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="md:w-1/2">
+                    <div class="bg-gray-50 p-4 rounded-lg">
+                        <h3 class="font-medium text-gray-700 mb-3">What we analyze:</h3>
+                        <ul class="space-y-2">
+                            <li class="flex items-start space-x-2">
+                                <i data-feather="check-circle" class="w-4 h-4 text-green-500 mt-0.5"></i>
+                                <span>Metadata (dates, creator info)</span>
+                            </li>
+                            <li class="flex items-start space-x-2">
+                                <i data-feather="check-circle" class="w-4 h-4 text-green-500 mt-0.5"></i>
+                                <span>Digital signatures & encryption</span>
+                            </li>
+                            <li class="flex items-start space-x-2">
+                                <i data-feather="check-circle" class="w-4 h-4 text-green-500 mt-0.5"></i>
+                                <span>Embedded files & JavaScript</span>
+                            </li>
+                            <li class="flex items-start space-x-2">
+                                <i data-feather="check-circle" class="w-4 h-4 text-green-500 mt-0.5"></i>
+                                <span>File structure & incremental updates</span>
+                            </li>
+                            <li class="flex items-start space-x-2">
+                                <i data-feather="check-circle" class="w-4 h-4 text-green-500 mt-0.5"></i>
+                                <span>Fuzzy matching for known editors</span>
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="resultsSection" class="hidden">
+            <div class="flex border-b border-gray-200 mb-6">
+                <button class="tab-button px-4 py-2 font-medium text-gray-600 hover:text-blue-600 transition tab-active" data-tab="summary">Summary</button>
+                <button class="tab-button px-4 py-2 font-medium text-gray-600 hover:text-blue-600 transition" data-tab="metadata">Metadata</button>
+                <button class="tab-button px-4 py-2 font-medium text-gray-600 hover:text-blue-600 transition" data-tab="security">Security Details</button>
+                <button class="tab-button px-4 py-2 font-medium text-gray-600 hover:text-blue-600 transition" data-tab="console">Console Output</button>
+            </div>
+
+            <div id="tabContent">
+                <!-- Summary Tab -->
+                <div class="tab-content active" id="summary-tab">
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+                        <div class="bg-white rounded-lg shadow-sm p-6">
+                            <h3 class="font-medium text-gray-700 mb-4">File Information</h3>
+                            <div class="space-y-3">
+                                <div class="flex justify-between">
+                                    <span class="text-gray-600">File Name:</span>
+                                    <span class="font-medium" id="fileName">example.pdf</span>
+                                </div>
+                                <div class="flex justify-between">
+                                    <span class="text-gray-600">File Size:</span>
+                                    <span class="font-medium" id="fileSize">2.4 MB</span>
+                                </div>
+                                <div class="flex justify-between">
+                                    <span class="text-gray-600">SHA-256 Hash:</span>
+                                    <span class="font-mono text-sm" id="fileHash">a1b2c3...e4f5</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="bg-white rounded-lg shadow-sm p-6">
+                            <h3 class="font-medium text-gray-700 mb-4">Security Risk</h3>
+                            <div class="flex flex-col items-center justify-center">
+                                <div class="risk-high rounded-full px-4 py-1 mb-3 font-medium" id="riskLevel">High Risk</div>
+                                <div class="text-center">
+                                    <p class="text-sm text-gray-600" id="riskDescription">Multiple suspicious elements detected</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="bg-white rounded-lg shadow-sm p-6">
+                            <h3 class="font-medium text-gray-700 mb-4">Quick Stats</h3>
+                            <div class="space-y-3">
+                                <div class="flex justify-between">
+                                    <span class="text-gray-600">Incremental Updates:</span>
+                                    <span class="font-medium" id="incrementalUpdates">3</span>
+                                </div>
+                                <div class="flex justify-between">
+                                    <span class="text-gray-600">Embedded Files:</span>
+                                    <span class="font-medium" id="embeddedFiles">2</span>
+                                </div>
+                                <div class="flex justify-between">
+                                    <span class="text-gray-600">JavaScript Blocks:</span>
+                                    <span class="font-medium" id="javascriptBlocks">1</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="bg-white rounded-lg shadow-sm p-6 mb-6">
+                        <h3 class="font-medium text-gray-700 mb-4">Key Findings</h3>
+                        <div class="space-y-4">
+                            <div class="p-3 rounded-md risk-high">
+                                <div class="flex items-start space-x-3">
+                                    <i data-feather="alert-triangle" class="w-5 h-5 mt-0.5"></i>
+                                    <div>
+                                        <h4 class="font-medium">Suspicious JavaScript Detected</h4>
+                                        <p class="text-sm mt-1">The document contains JavaScript that attempts to execute external resources.</p>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="p-3 rounded-md risk-medium">
+                                <div class="flex items-start space-x-3">
+                                    <i data-feather="alert-circle" class="w-5 h-5 mt-0.5"></i>
+                                    <div>
+                                        <h4 class="font-medium">Multiple Incremental Updates</h4>
+                                        <p class="text-sm mt-1">3 incremental updates detected, which could indicate document tampering.</p>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="p-3 rounded-md risk-low">
+                                <div class="flex items-start space-x-3">
+                                    <i data-feather="info" class="w-5 h-5 mt-0.5"></i>
+                                    <div>
+                                        <h4 class="font-medium">Standard Encryption</h4>
+                                        <p class="text-sm mt-1">Document uses standard 128-bit encryption (AES).</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="bg-white rounded-lg shadow-sm p-6">
+                        <h3 class="font-medium text-gray-700 mb-4">Recommendations</h3>
+                        <div class="space-y-3">
+                            <div class="flex items-start space-x-3">
+                                <i data-feather="check-circle" class="w-5 h-5 text-green-500 mt-0.5"></i>
+                                <div>
+                                    <p>Remove any unnecessary JavaScript from the document.</p>
+                                </div>
+                            </div>
+                            <div class="flex items-start space-x-3">
+                                <i data-feather="check-circle" class="w-5 h-5 text-green-500 mt-0.5"></i>
+                                <div>
+                                    <p>Flatten the document to remove incremental updates.</p>
+                                </div>
+                            </div>
+                            <div class="flex items-start space-x-3">
+                                <i data-feather="check-circle" class="w-5 h-5 text-green-500 mt-0.5"></i>
+                                <div>
+                                    <p>Verify the source of embedded files before opening.</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Metadata Tab -->
+                <div class="tab-content hidden" id="metadata-tab">
+                    <div class="bg-white rounded-lg shadow-sm p-6 mb-6">
+                        <h3 class="font-medium text-gray-700 mb-4">Document Metadata</h3>
+                        <div class="overflow-x-auto">
+                            <table class="min-w-full divide-y divide-gray-200">
+                                <tbody class="bg-white divide-y divide-gray-200">
+                                    <tr>
+                                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">Title</td>
+                                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">Example Document</td>
+                                    </tr>
+                                    <tr>
+                                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">Author</td>
+                                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">John Doe</td>
+                                    </tr>
+                                    <tr>
+                                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">Creator</td>
+                                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">Microsoft Word</td>
+                                    </tr>
+                                    <tr>
+                                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">Producer</td>
+                                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">Adobe PDF Library 15.0</td>
+                                    </tr>
+                                    <tr>
+                                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">Creation Date</td>
+                                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">2023-05-15 09:30:45</td>
+                                    </tr>
+                                    <tr>
+                                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">Modification Date</td>
+                                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">2023-05-17 14:22:18</td>
+                                    </tr>
+                                    <tr>
+                                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">Keywords</td>
+                                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">example, test, document</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <div class="bg-white rounded-lg shadow-sm p-6">
+                        <h3 class="font-medium text-gray-700 mb-4">Suspicious Metadata Indicators</h3>
+                        <div class="space-y-4">
+                            <div class="p-3 rounded-md risk-medium">
+                                <div class="flex items-start space-x-3">
+                                    <i data-feather="alert-circle" class="w-5 h-5 mt-0.5"></i>
+                                    <div>
+                                        <h4 class="font-medium">Creator/Producer Mismatch</h4>
+                                        <p class="text-sm mt-1">Document claims to be created with Microsoft Word but was produced by Adobe PDF Library.</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Security Details Tab -->
+                <div class="tab-content hidden" id="security-tab">
+                    <div class="bg-white rounded-lg shadow-sm p-6 mb-6">
+                        <h3 class="font-medium text-gray-700 mb-4">Security Analysis</h3>
+                        <div class="space-y-6">
+                            <div>
+                                <h4 class="text-lg font-medium text-gray-800 mb-3">Encryption</h4>
+                                <div class="pl-4 border-l-2 border-gray-200">
+                                    <div class="flex items-center justify-between py-2">
+                                        <span class="text-gray-600">Encryption Type:</span>
+                                        <span class="font-medium">Standard (AES-128)</span>
+                                    </div>
+                                    <div class="flex items-center justify-between py-2">
+                                        <span class="text-gray-600">Password Protected:</span>
+                                        <span class="font-medium">No</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div>
+                                <h4 class="text-lg font-medium text-gray-800 mb-3">Digital Signatures</h4>
+                                <div class="pl-4 border-l-2 border-gray-200">
+                                    <div class="flex items-center justify-between py-2">
+                                        <span class="text-gray-600">Signatures Present:</span>
+                                        <span class="font-medium">No</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div>
+                                <h4 class="text-lg font-medium text-gray-800 mb-3">Embedded Objects</h4>
+                                <div class="pl-4 border-l-2 border-gray-200">
+                                    <div class="p-3 rounded-md risk-medium mb-3">
+                                        <div class="flex items-start space-x-3">
+                                            <i data-feather="alert-circle" class="w-5 h-5 mt-0.5"></i>
+                                            <div>
+                                                <h4 class="font-medium">Embedded Executable</h4>
+                                                <p class="text-sm mt-1">Found embedded file: "setup.exe" (256 KB)</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="flex items-center justify-between py-2">
+                                        <span class="text-gray-600">Total Embedded Files:</span>
+                                        <span class="font-medium">2</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div>
+                                <h4 class="text-lg font-medium text-gray-800 mb-3">JavaScript Analysis</h4>
+                                <div class="pl-4 border-l-2 border-gray-200">
+                                    <div class="p-3 rounded-md risk-high mb-3">
+                                        <div class="flex items-start space-x-3">
+                                            <i data-feather="alert-triangle" class="w-5 h-5 mt-0.5"></i>
+                                            <div>
+                                                <h4 class="font-medium">Suspicious JavaScript</h4>
+                                                <p class="text-sm mt-1">Found JavaScript that attempts to load external resources</p>
+                                                <div class="mt-2 bg-gray-800 text-gray-200 p-2 rounded text-xs font-mono overflow-x-auto">
+                                                    <pre>app.alert("Loading external content...");<br>this.getURL("http://example.com/malicious.js");</pre>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="flex items-center justify-between py-2">
+                                        <span class="text-gray-600">Total JavaScript Blocks:</span>
+                                        <span class="font-medium">1</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Console Output Tab -->
+                <div class="tab-content hidden" id="console-tab">
+                    <div class="bg-white rounded-lg shadow-sm p-6 mb-6">
+                        <h3 class="font-medium text-gray-700 mb-4">Analysis Log</h3>
+                        <div class="console-output p-4 rounded-md">
+                            <div class="text-green-400">[INFO] Starting PDF analysis...</div>
+                            <div class="text-blue-400">[STATUS] Loading file: example.pdf (2.4 MB)</div>
+                            <div class="text-blue-400">[STATUS] Calculating SHA-256 hash...</div>
+                            <div class="text-blue-400">[STATUS] Extracting metadata...</div>
+                            <div class="text-yellow-400">[WARNING] Creator/Producer mismatch detected</div>
+                            <div class="text-blue-400">[STATUS] Checking encryption...</div>
+                            <div class="text-blue-400">[STATUS] Scanning for digital signatures...</div>
+                            <div class="text-blue-400">[STATUS] Analyzing document structure...</div>
+                            <div class="text-yellow-400">[WARNING] 3 incremental updates found</div>
+                            <div class="text-blue-400">[STATUS] Searching for embedded objects...</div>
+                            <div class="text-red-400">[ALERT] Found embedded executable: setup.exe</div>
+                            <div class="text-blue-400">[STATUS] Scanning for JavaScript...</div>
+                            <div class="text-red-400">[ALERT] Suspicious JavaScript detected</div>
+                            <div class="text-green-400">[INFO] Analysis complete</div>
+                            <div class="text-green-400">[INFO] Risk assessment: HIGH</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+
+        // Check for token
+        const token = localStorage.getItem("jwtToken");
+        if (!token) {
+            window.location.href = "login.html"; // Redirect if not logged in
+        }
+
+        
+        feather.replace();
+        
+        // Tab switching functionality
+        document.querySelectorAll('.tab-button').forEach(button => {
+            button.addEventListener('click', () => {
+                // Remove active class from all buttons and tabs
+                document.querySelectorAll('.tab-button').forEach(btn => {
+                    btn.classList.remove('tab-active');
+                });
+                document.querySelectorAll('.tab-content').forEach(tab => {
+                    tab.classList.remove('active');
+                    tab.classList.add('hidden');
+                });
+                
+                // Add active class to clicked button and corresponding tab
+                button.classList.add('tab-active');
+                const tabId = button.getAttribute('data-tab') + '-tab';
+                document.getElementById(tabId).classList.add('active');
+                document.getElementById(tabId).classList.remove('hidden');
+            });
+        });
+        
+        // File dropzone functionality
+        const dropzone = document.getElementById('dropzone');
+        const fileInput = document.getElementById('fileInput');
+        
+        dropzone.addEventListener('click', () => {
+            fileInput.click();
+        });
+        
+        fileInput.addEventListener('change', (e) => {
+            if (e.target.files.length) {
+                handleFileUpload(e.target.files[0]);
+            }
+        });
+        
+        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+            dropzone.addEventListener(eventName, preventDefaults, false);
+        });
+        
+        function preventDefaults(e) {
+            e.preventDefault();
+            e.stopPropagation();
+        }
+        
+        ['dragenter', 'dragover'].forEach(eventName => {
+            dropzone.addEventListener(eventName, highlight, false);
+        });
+        
+        ['dragleave', 'drop'].forEach(eventName => {
+            dropzone.addEventListener(eventName, unhighlight, false);
+        });
+        
+        function highlight() {
+            dropzone.classList.add('border-blue-500');
+        }
+        
+        function unhighlight() {
+            dropzone.classList.remove('border-blue-500');
+        }
+        
+        dropzone.addEventListener('drop', handleDrop, false);
+        
+        function handleDrop(e) {
+            const dt = e.dataTransfer;
+            const file = dt.files[0];
+            handleFileUpload(file);
+        }
+        
+        function handleFileUpload(file) {
+            if (file.type !== 'application/pdf') {
+                alert('Please upload a PDF file');
+                return;
+            }
+            
+            if (file.size > 50 * 1024 * 1024) {
+                alert('File size exceeds 50MB limit');
+                return;
+            }
+            
+            // Here you would typically send the file to your backend for processing
+            // For this demo, we'll just simulate processing
+            document.getElementById('fileName').textContent = file.name;
+            document.getElementById('fileSize').textContent = (file.size / (1024 * 1024)).toFixed(2) + ' MB';
+            
+            // Show results section
+            document.getElementById('resultsSection').classList.remove('hidden');
+            
+            // Scroll to results
+            document.getElementById('resultsSection').scrollIntoView({ behavior: 'smooth' });
+        }
+    </script>
+</body>
+</html>
