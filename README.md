@@ -95,6 +95,6 @@ python main.py split input.pdf output_folder
 
 ## Author
 
-Developed by Mihir.  
+Developed by Mihir Panchal.  
 For questions or feedback, please open an issue on GitHub.
 
