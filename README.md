@@ -2,6 +2,8 @@
 
 TrustPDF is a Python-based utility for working with PDF files. It provides tools for validating, manipulating, and securely handling PDF documents.
 
+Presentation - https://www.youtube.com/watch?v=uWr1LNoKOgY
+
 ## Overview
 
 TrustPDF aims to offer a lightweight and reliable solution for PDF processing. Depending on implementation, it can include operations like validation, merging, splitting, or compressing PDF files, while maintaining a focus on document integrity and security.
