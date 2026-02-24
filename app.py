@@ -1,6 +1,5 @@
 """
-Enhanced PDF Tampering Detection Tool - Robust Version
-Updated with comprehensive error handling and improved stability
+Enhanced PDF Tampering Detection Tool
 """
 
 import os
@@ -74,7 +73,7 @@ class PDFTamperingDetector:
                 if os.path.exists(temp_file):
                     os.remove(temp_file)
             except Exception:
-                pass  # Ignore cleanup errors
+                pass  
 
     def log(self, message):
         """Log message for UI display"""
@@ -173,7 +172,6 @@ class PDFTamperingDetector:
         # Run analysis methods with individual error handling
         analysis_methods = [
             (self._extract_comprehensive_metadata, "metadata extraction"),
-            (self._check_signatures, "signature analysis"),
             (self._check_encryption, "encryption analysis"),
             (self._find_embedded_files, "embedded files analysis"),
             (self._extract_images, "image analysis"),
@@ -423,33 +421,6 @@ class PDFTamperingDetector:
         except Exception:
             return "UNKNOWN RISK"
 
-    def _check_signatures(self):
-        self.log("\nDIGITAL SIGNATURE ANALYSIS")
-        self.log("-" * 30)
-
-        try:
-            doc = pymupdf.open(self.pdf_path)
-            sigs = doc.get_sigflags()
-            doc.close()
-
-            if sigs == 0:
-                self.log("ℹ️ No digital signatures found")
-                self.results['signatures'] = "No signatures"
-            elif sigs == 1:
-                self.log("⚠️ Unsigned signature fields detected")
-                self.tampering_indicators.append("Unsigned signature fields present")
-                self.results['signatures'] = "Unsigned fields present"
-            elif sigs == 3:
-                self.log("✅ Document contains valid digital signatures")
-                self.results['signatures'] = "Digitally signed"
-            else:
-                self.log(f"⚠️ Unknown signature flag: {sigs}")
-                self.tampering_indicators.append(f"Unusual signature flag: {sigs}")
-                self.results['signatures'] = f"Unknown flag: {sigs}"
-        except Exception as e:
-            self.log(f"❌ Error checking signatures: {e}")
-            self.results['signatures'] = "Analysis failed"
-
     def _check_encryption(self):
         self.log("\nENCRYPTION ANALYSIS")
         self.log("-" * 30)
@@ -553,7 +524,7 @@ class PDFTamperingDetector:
                 content = f.read()
                 
             startxrefs = []
-            for match in re.finditer(b"startxref\s*(\d+)", content):
+            for match in re.finditer(b"startxref\\s*(\\d+)", content):
                 try:
                     startxrefs.append(int(match.group(1)))
                 except ValueError:
@@ -846,19 +817,21 @@ class PDFTamperingDetector:
         else:
             verdict_items.append(f"❌ Unusual document structure detected")
 
-        # Calculate overall verdict
-        red_flag_count = len(self.red_flags)
+        # Calculate overall verdict based on failed checks
         failed_checks = len([item for item in verdict_items if item.startswith("❌")])
         
-        if red_flag_count >= 3 or failed_checks >= 4:
+        if failed_checks >= 4:
             overall_verdict = "🔴 HIGH RISK - Do not trust this document"
             verdict_explanation = "This document shows multiple signs of tampering or suspicious creation. It may be dangerous to open or trust."
-        elif red_flag_count >= 1 or failed_checks >= 2:
+            risk_level = "🔴 HIGH RISK"
+        elif failed_checks >= 2:
             overall_verdict = "🟡 MEDIUM RISK - Exercise caution"
             verdict_explanation = "This document has some suspicious characteristics. Verify its source before trusting its contents."
+            risk_level = "🟡 MEDIUM RISK"
         else:
             overall_verdict = "🟢 LOW RISK - Document appears trustworthy"
             verdict_explanation = "This document passes most security checks and appears to be legitimate."
+            risk_level = "🟢 LOW RISK"
 
         self.log(f"\n{overall_verdict}")
         self.log(f"{verdict_explanation}")
@@ -876,16 +849,56 @@ class PDFTamperingDetector:
             'overall': overall_verdict,
             'explanation': verdict_explanation,
             'detailed_checks': verdict_items,
-            'red_flag_count': red_flag_count,
             'failed_checks': failed_checks
         }
+        
+        # Update overall_risk_level to match the final verdict
+        self.results['overall_risk_level'] = risk_level
 
     def _generate_security_summary(self):
         self.log("\n" + "=" * 60)
         self.log("SECURITY ASSESSMENT SUMMARY")
         self.log("=" * 60)
         
-        risk_level = self._calculate_risk_level()
+        # Calculate risk based on the same criteria as final verdict
+        meta = self.results.get('comprehensive_metadata', {})
+        failed_checks = 0
+        
+        # Count failed checks
+        mandatory_fields = ['title', 'author', 'creator', 'producer', 'creation_date']
+        if any(not meta.get(field) for field in mandatory_fields):
+            failed_checks += 1
+            
+        if meta.get('creation_date') != meta.get('modification_date'):
+            failed_checks += 1
+            
+        if isinstance(self.results.get('incremental_updates', 0), int) and self.results.get('incremental_updates', 0) > 0:
+            failed_checks += 1
+            
+        if not self._check_against_whitelist(meta.get('producer', '')) and not self._check_against_whitelist(meta.get('creator', '')):
+            failed_checks += 1
+            
+        if self.results.get('javascript_count', 0) > 0:
+            failed_checks += 1
+            
+        if self.results.get('encryption', '') != "Not encrypted":
+            failed_checks += 1
+            
+        if len(self.results.get('embedded_files', [])) > 0:
+            failed_checks += 1
+            
+        optimization = self.results.get('optimization_reduction', 0)
+        if not isinstance(optimization, (int, float)) or not (-10 <= optimization <= 10):
+            failed_checks += 1
+        
+        # Determine risk level based on failed checks
+        if failed_checks >= 4:
+            risk_level = "🔴 HIGH RISK"
+        elif failed_checks >= 2:
+            risk_level = "🟡 MEDIUM RISK"
+        else:
+            risk_level = "🟢 LOW RISK"
+            
         self.log(f"OVERALL RISK LEVEL: {risk_level}\n")
 
         if self.red_flags:
@@ -913,44 +926,25 @@ class PDFTamperingDetector:
             self.log("")
 
         self._generate_recommendations(risk_level)
-
-    def _calculate_risk_level(self):
-        risk_score = 0
-        risk_score += len(self.red_flags) * 5  # Red flags are more serious
-        risk_score += len(self.security_issues) * 3
-        risk_score += len(self.tampering_indicators) * 1
-        risk_score += len(self.analysis_errors) * 2  # Analysis errors increase risk
-
-        self.results['risk_score'] = risk_score
+        
+        # Store results
+        self.results['overall_risk_level'] = risk_level
         self.results['red_flags'] = self.red_flags
         self.results['security_issues'] = self.security_issues
         self.results['tampering_indicators'] = self.tampering_indicators
-
-        if risk_score >= 15:
-            return "🔴 CRITICAL RISK"
-        elif risk_score >= 10:
-            return "🔴 HIGH RISK"
-        elif risk_score >= 6:
-            return "🟡 MEDIUM-HIGH RISK"
-        elif risk_score >= 3:
-            return "🟠 MEDIUM RISK"
-        elif risk_score >= 1:
-            return "🟡 LOW-MEDIUM RISK"
-        else:
-            return "🟢 LOW RISK"
 
     def _generate_recommendations(self, risk_level):
         self.log("💡 RECOMMENDATIONS:")
         recommendations = []
         
-        if "CRITICAL" in risk_level or "HIGH RISK" in risk_level:
+        if "HIGH RISK" in risk_level:
             recs = [
                 "Do NOT open this PDF in a standard viewer",
                 "Consider this PDF potentially dangerous",
                 "Use a sandboxed environment if analysis is required",
                 "Verify the document source immediately"
             ]
-        elif "MEDIUM" in risk_level:
+        elif "MEDIUM RISK" in risk_level:
             recs = [
                 "Exercise extreme caution when opening this PDF",
                 "Use a secure PDF viewer with JavaScript disabled",
@@ -968,57 +962,25 @@ class PDFTamperingDetector:
             recs.append("Re-run analysis with a different tool to verify results")
 
         for rec in recs:
-            if "CRITICAL" in risk_level or "HIGH RISK" in risk_level:
+            if "HIGH RISK" in risk_level:
                 self.log(f"   ⚠️ {rec}")
-            elif "MEDIUM" in risk_level:
+            elif "MEDIUM RISK" in risk_level:
                 self.log(f"   ⚠️ {rec}")
             else:
                 self.log(f"   ✅ {rec}")
             recommendations.append(rec)
 
         self.results['recommendations'] = recommendations
-        self.results['overall_risk_level'] = risk_level
-
-# Gradio Interface Functions (unchanged from your original code)
-def analyze_pdf_gradio(file_path):
-    """Main analysis function for Gradio interface"""
-    if not file_path:
-        return "❌ No file uploaded", "", "", "", ""
-    
-    if not file_path.endswith('.pdf'):
-        return "❌ Please upload a PDF file only", "", "", "", ""
-    
-    # Run analysis
-    detector = PDFTamperingDetector(file_path)
-    results = detector.analyze_pdf()
-    
-    # Format results for display
-    console_output = "\n".join(results.get('console_output', []))
-    
-    # Create summary
-    summary = create_summary(results)
-    
-    # Create metadata display
-    metadata_display = create_metadata_display(results)
-    
-    # Create security details
-    security_details = create_security_details(results)
-    
-    # Create final verdict
-    final_verdict = create_final_verdict(results)
-    
-    return summary, metadata_display, security_details, console_output, final_verdict
 
 def create_summary(results):
     """Create simplified, user-friendly summary"""
     risk_level = results.get('overall_risk_level', 'Unknown')
-    red_flags_count = len(results.get('red_flags', []))
     analysis_errors = len(results.get('analysis_errors', []))
     
     # Simplified risk explanation
-    if "CRITICAL" in risk_level or "HIGH RISK" in risk_level:
+    if "HIGH RISK" in risk_level:
         risk_explanation = "This document appears dangerous and should not be trusted."
-    elif "MEDIUM" in risk_level:
+    elif "MEDIUM RISK" in risk_level:
         risk_explanation = "This document has suspicious elements. Use caution."
     else:
         risk_explanation = "This document appears to be safe."
@@ -1087,8 +1049,7 @@ def create_security_details(results):
     """Create detailed security analysis"""
     details = "## Detailed Security Analysis\n\n"
     
-    # Core security features
-    details += f"**Digital Signatures:** {results.get('signatures', 'Not analyzed')}\n\n"
+    # Core security features (removed signatures section)
     details += f"**Encryption Status:** {results.get('encryption', 'Not analyzed')}\n\n"
     
     incremental_updates = results.get('incremental_updates', 'Not analyzed')
@@ -1163,7 +1124,6 @@ def create_final_verdict(results):
     verdict += f"""
 
 ### Summary:
-- **Critical Issues:** {verdict_data['red_flag_count']}
 - **Failed Security Checks:** {verdict_data['failed_checks']} out of 8
 """
 
@@ -1176,186 +1136,12 @@ def create_final_verdict(results):
 
 ### What This Means:
 """
-    
-    if verdict_data['red_flag_count'] >= 3:
+
+    if verdict_data['failed_checks'] >= 4:
         verdict += "This document shows multiple signs of tampering or malicious content. Do not open it with standard software."
-    elif verdict_data['red_flag_count'] >= 1:
+    elif verdict_data['failed_checks'] >= 2:
         verdict += "This document has some concerning characteristics. Verify its source and use caution."
     else:
         verdict += "This document appears legitimate and safe to use with normal security precautions."
     
     return verdict
-
-# Create Enhanced Gradio Interface (unchanged from your original code)
-def create_gradio_interface():
-    with gr.Blocks(
-        title="TrustPDF - Enhanced Security Scanner",
-        theme=gr.themes.Soft(),
-        css="""
-        .gradio-container {
-            max-width: 1400px !important;
-        }
-        .header {
-            text-align: center;
-            margin-bottom: 30px;
-            padding: 20px;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            border-radius: 10px;
-        }
-        .verdict-box {
-            background: linear-gradient(135deg, #66bb6a 0%, #388e3c 100%);
-            color: white;
-            padding: 20px;
-            border-radius: 10px;
-            margin: 10px 0;
-        }
-        .risk-critical {
-            background-color: #ffebee !important;
-            border-left: 5px solid #d32f2f !important;
-            padding: 15px !important;
-        }
-        .risk-high {
-            background-color: #ffebee !important;
-            border-left: 5px solid #f44336 !important;
-            padding: 15px !important;
-        }
-        .risk-medium {
-            background-color: #fff3e0 !important;
-            border-left: 5px solid #ff9800 !important;
-            padding: 15px !important;
-        }
-        .risk-low {
-            background-color: #e8f5e8 !important;
-            border-left: 5px solid #4caf50 !important;
-            padding: 15px !important;
-        }
-        """
-    ) as interface:
-        
-        # Header
-        gr.HTML("""
-        <div class="header">
-            <h1>TrustPDF - Enhanced Security Scanner</h1>
-            <p><em>Robust PDF analysis with comprehensive error handling</em></p>
-        </div>
-        """)
-        
-        with gr.Row():
-            with gr.Column(scale=1):
-                # File upload section
-                gr.Markdown("## Upload PDF File")
-                file_input = gr.File(
-                    label="Select PDF File for Analysis",
-                    file_types=[".pdf"],
-                    type="filepath"
-                )
-                
-                analyze_btn = gr.Button(
-                    "🔍 Analyze PDF Security",
-                    variant="primary",
-                    size="lg"
-                )
-                
-                gr.Markdown("""
-                ### What We Check:
-                - Complete document metadata
-                - Creation vs modification dates
-                - Software whitelist verification
-                - Incremental updates (modifications)
-                - Embedded files and scripts
-                - Encryption and digital signatures
-                - File structure integrity
-                - Error-resistant analysis
-                """)
-            
-            with gr.Column(scale=2):
-                # Results section
-                gr.Markdown("## Analysis Results")
-                
-                with gr.Tabs():
-                    with gr.TabItem("Summary"):
-                        summary_output = gr.Markdown(
-                            label="Security Assessment Summary",
-                            value="Upload a PDF file and click 'Analyze PDF Security' to see results here."
-                        )
-                    
-                    with gr.TabItem("Final Verdict"):
-                        verdict_output = gr.Markdown(
-                            label="Final Security Verdict",
-                            value="The final security verdict will appear here after analysis.",
-                            elem_classes=["verdict-box"]
-                        )
-                    
-                    with gr.TabItem("Document Info"):
-                        metadata_output = gr.Markdown(
-                            label="Complete Document Information",
-                            value="Document metadata and software analysis will appear here after analysis."
-                        )
-                    
-                    with gr.TabItem("Security Details"):
-                        security_output = gr.Markdown(
-                            label="Detailed Security Analysis",
-                            value="Detailed security information will appear here after analysis."
-                        )
-                    
-                    with gr.TabItem("Full Log"):
-                        console_output = gr.Textbox(
-                            label="Complete Analysis Log",
-                            placeholder="Complete analysis log will appear here...",
-                            lines=25,
-                            max_lines=35,
-                            show_copy_button=True
-                        )
-        
-        # Event handlers
-        def analyze_and_update_all(file_path):
-            if not file_path:
-                return "No file uploaded", "No verdict available", "No metadata available", "No security details", "No console output"
-            
-            # Perform analysis
-            summary, metadata, security, console, verdict = analyze_pdf_gradio(file_path)
-            return summary, verdict, metadata, security, console
-        
-        # Connect event handlers
-        analyze_btn.click(
-            fn=analyze_and_update_all,
-            inputs=[file_input],
-            outputs=[
-                summary_output,
-                verdict_output,
-                metadata_output,
-                security_output,
-                console_output
-            ]
-        )
-        
-        # Add footer with information
-        gr.HTML("""
-        <div style="text-align: center; margin-top: 30px; padding: 20px; background-color: #f5f5f5; border-radius: 10px;">
-            <h3>Robust Security Analysis</h3>
-            <p>This version includes comprehensive error handling to analyze even corrupted or malformed PDF files safely.
-            All PDF operations are protected with try-catch blocks and null checks.</p>
-            <p><strong>Enhanced Features:</strong> Graceful error recovery, detailed error reporting, 
-            safe object handling, and improved stability for edge cases.</p>
-        </div>
-        """)
-        
-    return interface
-
-# Main execution
-if __name__ == "__main__":
-    print("🚀 Starting Robust PDF Tampering Detection Tool")
-    
-    # Create and launch interface
-    interface = create_gradio_interface()
-    
-    # Launch with custom settings
-    interface.launch(
-        server_name="0.0.0.0",
-        server_port=7860,
-        share=False,
-        debug=True,
-        show_error=True,
-        quiet=False
-    )
